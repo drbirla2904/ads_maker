@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}My Creations – One Click Designer{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-10">
+  <div class="flex items-center justify-between mb-8">
+    <div><h1 class="text-3xl font-bold">My Creations</h1><p class="text-gray-400 text-sm mt-1">All ads you've generated</p></div>
+    <a href="{% url 'template_list' %}" class="bg-brand text-black font-semibold px-5 py-2.5 rounded-full text-sm hover:opacity-90">+ Create New</a>
+  </div>
+
+  {% if creations %}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    {% for c in creations %}
+    <div class="bg-dark-card border border-dark-border rounded-2xl overflow-hidden">
+      <div class="aspect-[9/16] bg-dark-border relative overflow-hidden">
+        {% if c.status == 'done' %}
+          {% if c.output_thumbnail %}<img src="{{ c.output_thumbnail.url }}" class="w-full h-full object-cover">
+          {% elif c.output_file %}<img src="{{ c.output_file.url }}" class="w-full h-full object-cover">
+          {% endif %}
+          <div class="absolute bottom-2 right-2"><span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">Done</span></div>
+        {% elif c.status == 'processing' or c.status == 'pending' %}
+          <div class="w-full h-full flex items-center justify-center">
+            <div class="w-8 h-8 border-2 border-dark-border border-t-brand rounded-full animate-spin"></div>
+          </div>
+          <div class="absolute bottom-2 right-2"><span class="bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full">Processing</span></div>
+        {% else %}
+          <div class="w-full h-full flex items-center justify-center text-3xl">❌</div>
+          <div class="absolute bottom-2 right-2"><span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">Failed</span></div>
+        {% endif %}
+      </div>
+      <div class="p-3">
+        <p class="text-xs font-semibold text-white truncate">{{ c.template.title }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">{{ c.created_at|date:"M d, Y" }}</p>
+        {% if c.status == 'done' and c.output_file %}
+        <a href="{{ c.output_file.url }}" download class="mt-2 block text-center bg-brand text-black text-xs font-bold py-1.5 rounded-lg hover:opacity-90">⬇ Download</a>
+        {% elif c.status == 'pending' or c.status == 'processing' %}
+        <a href="{% url 'creation_status' c.pk %}" class="mt-2 block text-center border border-dark-border text-xs py-1.5 rounded-lg hover:border-brand text-gray-300">View Status</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-24 text-gray-500">
+    <div class="text-6xl mb-4">🎨</div>
+    <h2 class="text-xl font-semibold mb-2">No creations yet</h2>
+    <p class="text-sm mb-6">Pick a template and create your first ad!</p>
+    <a href="{% url 'template_list' %}" class="bg-brand text-black font-bold px-8 py-3 rounded-full hover:opacity-90">Browse Templates</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

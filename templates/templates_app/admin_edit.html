@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% block title %}Edit – {{ template.title }}{% endblock %}
+{% block extra_head %}
+<style>
+  #canvasWrapper { position: relative; display: inline-block; }
+  #previewCanvas { display: block; max-width: 100%; border-radius: 10px; }
+  .zone-handle {
+    position: absolute; width: 16px; height: 16px;
+    background: #C8FF00; border: 2.5px solid #000;
+    border-radius: 50%; transform: translate(-50%, -50%);
+    cursor: grab; z-index: 20; box-shadow: 0 0 6px rgba(200,255,0,0.8);
+  }
+  .zone-handle:active { cursor: grabbing; transform: translate(-50%,-50%) scale(1.3); }
+  .tab-btn { padding:7px 18px; border-radius:999px; font-size:13px; font-weight:600; border:2px solid #2a2a2a; background:#1a1a1a; color:#aaa; cursor:pointer; transition:all 0.2s; }
+  .tab-btn.active { background:#C8FF00; color:#000; border-color:#C8FF00; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center gap-4 mb-8">
+    <a href="{% url 'admin_templates' %}" class="text-gray-400 hover:text-brand text-sm">← Back</a>
+    <h1 class="text-2xl font-bold">Edit: <span class="text-brand">{{ template.title }}</span></h1>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" id="editForm">
+    {% csrf_token %}
+    <input type="hidden" name="zone_data" id="zoneDataInput" value="{{ template.zone_data }}">
+
+    <div class="grid lg:grid-cols-2 gap-8">
+
+      <!-- Zone editor -->
+      <div class="space-y-5">
+        <div class="bg-dark-card border border-dark-border rounded-2xl p-5">
+          <h2 class="font-bold mb-1 text-brand">Replaceable Zone</h2>
+          <p class="text-gray-400 text-xs mb-4">Current zone is loaded. Redraw or drag handles to adjust.</p>
+
+          <div class="flex gap-2 mb-4 flex-wrap">
+            <button type="button" class="tab-btn active" id="tab-rect"  onclick="setMode('rect')">▭ Rectangle</button>
+            <button type="button" class="tab-btn"        id="tab-persp" onclick="setMode('perspective')">⬟ Perspective</button>
+            <button type="button" class="tab-btn"        onclick="clearZone()">🗑 Clear</button>
+          </div>
+
+          <div id="canvasContainer" class="bg-dark-border rounded-xl overflow-hidden">
+            <div id="canvasWrapper">
+              <canvas id="previewCanvas"></canvas>
+            </div>
+          </div>
+
+          <div id="zoneStatusBar" class="mt-3 hidden">
+            <div class="flex items-center gap-2 bg-brand/10 border border-brand/30 rounded-xl px-4 py-2">
+              <span class="text-brand text-lg">✅</span>
+              <p class="text-brand text-xs font-bold" id="zoneStatusText"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="space-y-4">
+        <div class="bg-dark-card border border-dark-border rounded-2xl p-5 space-y-4">
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">Title</label>
+            <input type="text" name="title" value="{{ template.title }}" required
+              class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">Description</label>
+            <textarea name="description" rows="3"
+              class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand resize-none">{{ template.description }}</textarea>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">Tags</label>
+            <input type="text" name="tags" value="{{ template.tags }}"
+              class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Category</label>
+              <select name="category" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+                <option value="">None</option>
+                {% for cat in categories %}
+                <option value="{{ cat.pk }}" {% if template.category.pk == cat.pk %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Orientation</label>
+              <select name="orientation" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+                <option value="portrait"  {% if template.orientation == 'portrait'  %}selected{% endif %}>Portrait</option>
+                <option value="landscape" {% if template.orientation == 'landscape' %}selected{% endif %}>Landscape</option>
+                <option value="square"    {% if template.orientation == 'square'    %}selected{% endif %}>Square</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">Replace Thumbnail</label>
+            <input type="file" name="thumbnail_file" accept="image/*"
+              class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm file:bg-brand file:text-black file:border-0 file:rounded-full file:px-3 file:py-1 file:mr-3 file:text-xs cursor-pointer">
+          </div>
+          <div class="flex flex-wrap gap-4">
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+              <input type="checkbox" name="is_free"     {% if template.is_free     %}checked{% endif %} class="accent-brand w-4 h-4"> Free
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+              <input type="checkbox" name="is_featured" {% if template.is_featured %}checked{% endif %} class="accent-brand w-4 h-4"> Featured
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+              <input type="checkbox" name="is_active"   {% if template.is_active   %}checked{% endif %} class="accent-brand w-4 h-4"> Active
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-brand text-black font-black py-4 rounded-2xl text-lg hover:opacity-90">💾 Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let mode = 'rect', drawing = false, startX = 0, startY = 0;
+let rectZone = null, perspPts = [], handles = [], draggingHandle = null;
+let imgNatW = {{ template.canvas_width }}, imgNatH = {{ template.canvas_height }}, canvasScale = 1;
+
+const canvas  = document.getElementById('previewCanvas');
+const ctx     = canvas.getContext('2d');
+const wrapper = document.getElementById('canvasWrapper');
+
+// Load existing zone
+const existingZone = {{ template.zone_data|safe }};
+
+// Load template image
+const img = new Image();
+img.onload = () => {
+  imgNatW = img.naturalWidth; imgNatH = img.naturalHeight;
+  const container = document.getElementById('canvasContainer');
+  const maxW = container.clientWidth - 4;
+  canvasScale = Math.min(1, maxW / imgNatW, 540 / imgNatH);
+  canvas.width  = Math.round(imgNatW * canvasScale);
+  canvas.height = Math.round(imgNatH * canvasScale);
+  canvas._img = img;
+
+  // Restore existing zone
+  if (existingZone && existingZone.points && existingZone.points.length === 4) {
+    const sc = canvasScale;
+    if (existingZone.mode === 'perspective') {
+      mode = 'perspective';
+      perspPts = existingZone.points.map(p => [p[0]*sc, p[1]*sc]);
+      document.getElementById('tab-rect').classList.remove('active');
+      document.getElementById('tab-persp').classList.add('active');
+    } else {
+      mode = 'rect';
+      const pts = existingZone.points.map(p=>[p[0]*sc, p[1]*sc]);
+      const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+      rectZone = {x:Math.min(...xs), y:Math.min(...ys), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys)};
+    }
+    redraw(); buildHandles();
+  } else {
+    redraw();
+  }
+  bindCanvasEvents();
+};
+img.src = '{{ template.file.url }}';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-rect').classList.toggle('active', m === 'rect');
+  document.getElementById('tab-persp').classList.toggle('active', m === 'perspective');
+  clearZone(false);
+}
+
+function redraw() {
+  if (!canvas._img) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(canvas._img, 0, 0, canvas.width, canvas.height);
+  let pts4 = null;
+  if (mode === 'rect' && rectZone) {
+    const {x,y,w,h} = rectZone;
+    pts4 = [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+  } else if (mode === 'perspective') {
+    pts4 = perspPts.length === 4 ? perspPts : null;
+    perspPts.forEach((p,i) => {
+      ctx.beginPath(); ctx.arc(p[0],p[1],6,0,Math.PI*2);
+      ctx.fillStyle='#C8FF00'; ctx.fill();
+      ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle='#000'; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(['TL','TR','BR','BL'][i]||i+1,p[0],p[1]);
+    });
+  }
+  if (pts4) drawZoneOverlay(pts4);
+  updateZoneData();
+}
+
+function drawZoneOverlay(pts) {
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  pts.forEach(p=>ctx.lineTo(p[0],p[1])); ctx.closePath();
+  ctx.fillStyle='rgba(200,255,0,0.28)'; ctx.fill();
+  ctx.strokeStyle='#C8FF00'; ctx.lineWidth=2.5; ctx.setLineDash([8,4]); ctx.stroke(); ctx.setLineDash([]);
+  pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.fillStyle='#C8FF00';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();});
+  const cx=pts.reduce((s,p)=>s+p[0],0)/4, cy=pts.reduce((s,p)=>s+p[1],0)/4;
+  const xs=pts.map(p=>p[0]); const zw=Math.max(...xs)-Math.min(...xs);
+  const fs=Math.max(11,Math.min(28,zw/7));
+  ctx.font=`bold ${fs}px sans-serif`;
+  const tw=ctx.measureText('YOUR AD').width;
+  const bw=tw+fs*1.4, bh=fs*3.6, bx=cx-bw/2, by=cy-bh/2;
+  roundRect(ctx,bx,by,bw,bh,8);
+  ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fill();
+  ctx.strokeStyle='#C8FF00'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle='#C8FF00'; ctx.font=`bold ${fs}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.fillText('YOUR AD', cx, cy-fs*0.1);
+  const subFs=Math.max(9,fs*0.55);
+  ctx.font=`${subFs}px sans-serif`; ctx.fillStyle='rgba(200,255,0,0.7)';
+  ctx.fillText('📸 Place Here', cx, cy+subFs*1.6);
+}
+
+function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();}
+
+function bindCanvasEvents(){
+  canvas.style.cursor='crosshair';
+  canvas.onmousedown=(e)=>{
+    const {x,y}=cXY(e);
+    if(mode==='rect'){drawing=true;startX=x;startY=y;rectZone=null;clearHandles();redraw();}
+    else{if(perspPts.length<4){perspPts.push([x,y]);redraw();if(perspPts.length===4)buildHandles();}}
+  };
+  canvas.onmousemove=(e)=>{
+    if(!drawing||mode!=='rect')return;
+    const{x,y}=cXY(e);
+    rectZone={x:Math.min(startX,x),y:Math.min(startY,y),w:Math.abs(x-startX),h:Math.abs(y-startY)};redraw();
+  };
+  canvas.onmouseup=(e)=>{if(drawing&&mode==='rect'){drawing=false;if(rectZone&&rectZone.w>8&&rectZone.h>8)buildHandles();else{rectZone=null;redraw();}}};
+}
+
+function cXY(e){const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(canvas.width,e.clientX-r.left)),y:Math.max(0,Math.min(canvas.height,e.clientY-r.top))};}
+
+function buildHandles(){
+  clearHandles();
+  getCanvasPts().forEach((pt,i)=>{
+    const h=document.createElement('div');h.className='zone-handle';
+    h.style.left=(pt[0]+canvas.offsetLeft)+'px';h.style.top=(pt[1]+canvas.offsetTop)+'px';
+    h.dataset.idx=i; wrapper.appendChild(h); handles.push(h);
+    h.onmousedown=(e)=>{e.stopPropagation();draggingHandle=h;};
+  });
+  document.onmousemove=(e)=>moveHandle(e.clientX,e.clientY);
+  document.onmouseup=()=>{draggingHandle=null;};
+}
+
+function moveHandle(cx,cy){
+  if(!draggingHandle)return;
+  const wr=wrapper.getBoundingClientRect();
+  let nx=Math.max(0,Math.min(canvas.width, cx-wr.left-canvas.offsetLeft));
+  let ny=Math.max(0,Math.min(canvas.height,cy-wr.top-canvas.offsetTop));
+  draggingHandle.style.left=(nx+canvas.offsetLeft)+'px';
+  draggingHandle.style.top=(ny+canvas.offsetTop)+'px';
+  const idx=parseInt(draggingHandle.dataset.idx);
+  if(mode==='rect'){const c=getCanvasPts();c[idx]=[nx,ny];const xs=c.map(p=>p[0]),ys=c.map(p=>p[1]);rectZone={x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)};}
+  else{perspPts[idx]=[nx,ny];}
+  redraw();
+}
+
+function getCanvasPts(){if(mode==='rect'&&rectZone){const{x,y,w,h}=rectZone;return[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];}return perspPts.slice(0,4);}
+function clearHandles(){handles.forEach(h=>h.remove());handles=[];}
+
+function clearZone(r=true){rectZone=null;perspPts=[];clearHandles();document.getElementById('zoneDataInput').value='{}';document.getElementById('zoneStatusBar').classList.add('hidden');if(r&&canvas._img)redraw();}
+
+function updateZoneData(){
+  const sc=1/canvasScale; let zone={};
+  if(mode==='rect'&&rectZone){
+    const{x,y,w,h}=rectZone;
+    const pts=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(p=>[Math.round(p[0]*sc),Math.round(p[1]*sc)]);
+    zone={x:Math.round(x*sc),y:Math.round(y*sc),width:Math.round(w*sc),height:Math.round(h*sc),points:pts};
+  }else if(mode==='perspective'&&perspPts.length===4){
+    const pts=perspPts.map(p=>[Math.round(p[0]*sc),Math.round(p[1]*sc)]);
+    const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+    zone={points:pts,x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys),mode:'perspective'};
+  }
+  const has=Object.keys(zone).length>0;
+  document.getElementById('zoneDataInput').value=has?JSON.stringify(zone):'{}';
+  document.getElementById('zoneStatusBar').classList.toggle('hidden',!has);
+  if(has)document.getElementById('zoneStatusText').textContent=`${zone.width}×${zone.height}px · ${zone.points.length} corners`;
+}
+</script>
+{% endblock %}

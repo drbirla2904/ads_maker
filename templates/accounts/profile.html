@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}My Profile{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-12">
+  <h1 class="text-2xl font-bold mb-8">My Profile</h1>
+  <div class="bg-dark-card border border-dark-border rounded-2xl p-6">
+    <div class="flex items-center gap-4 mb-6">
+      <div class="w-16 h-16 rounded-full bg-brand flex items-center justify-center text-black font-black text-2xl">
+        {% if profile.avatar %}<img src="{{ profile.avatar.url }}" class="w-full h-full rounded-full object-cover">
+        {% else %}{{ user.username|first|upper }}{% endif %}
+      </div>
+      <div><p class="font-bold text-lg">{{ user.username }}</p><p class="text-gray-400 text-sm">{{ profile.plan|capfirst }} Plan</p></div>
+    </div>
+    <form method="POST" enctype="multipart/form-data" class="space-y-4">
+      {% csrf_token %}
+      <div><label class="text-xs text-gray-400 mb-1 block">Display Name</label>
+        <input type="text" name="creator_name" value="{{ profile.creator_name }}" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand text-sm"></div>
+      <div><label class="text-xs text-gray-400 mb-1 block">Bio</label>
+        <textarea name="bio" rows="3" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand text-sm resize-none">{{ profile.bio }}</textarea></div>
+      <div><label class="text-xs text-gray-400 mb-1 block">Avatar</label>
+        <input type="file" name="avatar" accept="image/*" class="text-sm text-gray-400 file:bg-dark-border file:border-0 file:text-brand file:rounded-lg file:px-3 file:py-1 file:cursor-pointer"></div>
+      <button type="submit" class="w-full bg-brand text-black font-bold py-3 rounded-xl hover:opacity-90">Save Profile</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

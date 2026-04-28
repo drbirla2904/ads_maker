@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}{{ template.title }} – One Click Designer{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-8">
+  <a href="{% url 'template_list' %}" class="inline-flex items-center gap-2 text-gray-400 hover:text-brand text-sm mb-6">← Back to Templates</a>
+
+  <div class="grid md:grid-cols-2 gap-10">
+    <!-- Preview -->
+    <div class="relative">
+      <div class="rounded-2xl overflow-hidden bg-dark-card border border-dark-border">
+        {% if template.file_type == 'video' %}
+          <video src="{{ template.file.url }}" autoplay muted loop playsinline class="w-full max-h-[70vh] object-contain"></video>
+        {% else %}
+          <img src="{{ template.file.url }}" alt="{{ template.title }}" class="w-full max-h-[70vh] object-contain">
+        {% endif %}
+      </div>
+      <!-- Like button -->
+      {% if user.is_authenticated %}
+      <button onclick="toggleLike({{ template.pk }})" id="like-btn"
+        class="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all
+        {% if is_liked %}bg-red-500 text-white{% else %}bg-dark-card/80 text-gray-400 hover:text-red-400{% endif %}">
+        ♥
+      </button>
+      {% endif %}
+    </div>
+
+    <!-- Info + CTA -->
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        {% if template.is_free %}<span class="bg-brand text-black text-xs font-bold px-3 py-1 rounded-full">Free</span>
+        {% else %}<span class="bg-yellow-500 text-black text-xs font-bold px-3 py-1 rounded-full">Pro</span>{% endif %}
+        <span class="bg-dark-card border border-dark-border text-gray-400 text-xs px-3 py-1 rounded-full">{{ template.file_type|capfirst }}</span>
+        <span class="bg-dark-card border border-dark-border text-gray-400 text-xs px-3 py-1 rounded-full">{{ template.orientation|capfirst }}</span>
+      </div>
+
+      <h1 class="text-3xl font-black mb-2">{{ template.title }}</h1>
+      <p class="text-gray-400 text-sm mb-4">by <span class="text-brand">{{ template.creator.username }}</span> · Uploaded {{ template.created_at|date:"M d, Y" }}</p>
+
+      {% if template.description %}
+      <p class="text-gray-300 text-sm mb-6 leading-relaxed">{{ template.description }}</p>
+      {% endif %}
+
+      <div class="flex gap-4 text-sm text-gray-400 mb-6">
+        <span id="like-count">♥ {{ template.likes_count }} likes</span>
+        <span>▶ {{ template.uses_count }} uses</span>
+        <span>📐 {{ template.canvas_width }}×{{ template.canvas_height }}</span>
+      </div>
+
+      {% if template.get_tags_list %}
+      <div class="flex flex-wrap gap-2 mb-6">
+        {% for tag in template.get_tags_list %}
+        <a href="{% url 'template_list' %}?q={{ tag }}" class="px-3 py-1 bg-dark-card border border-dark-border text-xs text-gray-400 rounded-full hover:border-brand hover:text-brand">{{ tag }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Use Template CTA -->
+      {% if user.is_authenticated %}
+      <a href="{% url 'create_ad' template.pk %}" class="block w-full bg-brand text-black font-bold py-4 rounded-2xl text-center text-lg hover:opacity-90 transition-all mb-3">
+        🎨 Use This Template
+      </a>
+      {% else %}
+      <a href="{% url 'login' %}?next={% url 'template_detail' template.pk %}" class="block w-full bg-brand text-black font-bold py-4 rounded-2xl text-center text-lg hover:opacity-90 transition-all mb-3">
+        Login to Use Template
+      </a>
+      {% endif %}
+
+      <p class="text-gray-500 text-xs text-center">Upload your image or video — rendered in seconds</p>
+    </div>
+  </div>
+
+  <!-- Related -->
+  {% if related %}
+  <div class="mt-16">
+    <h2 class="text-xl font-bold mb-6">Related Templates</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {% for t in related %}{% include 'templates_app/_template_card.html' %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function toggleLike(id) {
+  const res = await fetch(`/templates/${id}/like/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': '{{ csrf_token }}'}
+  });
+  const data = await res.json();
+  const btn = document.getElementById('like-btn');
+  if (data.liked) {
+    btn.className = btn.className.replace('bg-dark-card/80 text-gray-400 hover:text-red-400', 'bg-red-500 text-white');
+  } else {
+    btn.className = btn.className.replace('bg-red-500 text-white', 'bg-dark-card/80 text-gray-400 hover:text-red-400');
+  }
+  document.getElementById('like-count').textContent = `♥ ${data.count} likes`;
+}
+</script>
+{% endblock %}

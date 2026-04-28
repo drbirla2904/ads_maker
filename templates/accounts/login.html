@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Login – One Click Designer{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto px-4 py-16">
+  <div class="text-center mb-8">
+    <div class="w-14 h-14 bg-brand rounded-2xl flex items-center justify-center text-black font-black text-2xl mx-auto mb-4">OC</div>
+    <h1 class="text-2xl font-bold">Welcome back</h1>
+    <p class="text-gray-400 text-sm mt-1">Log in to create stunning ads</p>
+  </div>
+  <div class="bg-dark-card border border-dark-border rounded-2xl p-8">
+    <form method="POST" class="space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}<div class="bg-red-900/40 border border-red-700 text-red-300 text-sm px-4 py-3 rounded-xl">Invalid username or password.</div>{% endif %}
+      <div>
+        <label class="text-xs text-gray-400 mb-1 block">Username</label>
+        <input type="text" name="username" autofocus required
+          class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand text-sm">
+      </div>
+      <div>
+        <label class="text-xs text-gray-400 mb-1 block">Password</label>
+        <input type="password" name="password" required
+          class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand text-sm">
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="w-full bg-brand text-black font-bold py-3.5 rounded-xl hover:opacity-90 mt-2">Log In</button>
+    </form>
+    <p class="text-center text-gray-500 text-sm mt-6">Don't have an account? <a href="{% url 'register' %}" class="text-brand hover:underline">Sign up free</a></p>
+  </div>
+</div>
+{% endblock %}

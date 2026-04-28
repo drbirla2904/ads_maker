@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block title %}Processing Your Ad...{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-16 text-center">
+  <div id="processingState" class="{% if creation.status == 'done' %}hidden{% endif %}">
+    <div class="w-20 h-20 border-4 border-dark-border border-t-brand rounded-full animate-spin mx-auto mb-6"></div>
+    <h1 class="text-2xl font-bold mb-2">Creating Your Ad...</h1>
+    <p class="text-gray-400 text-sm mb-2">Compositing your content onto the template.</p>
+    <p class="text-gray-500 text-xs">This usually takes 5–30 seconds.</p>
+    <div class="mt-6 bg-dark-card border border-dark-border rounded-xl p-4">
+      <p class="text-xs text-gray-400">Status: <span id="statusText" class="text-brand">{{ creation.status|capfirst }}</span></p>
+    </div>
+  </div>
+
+  <div id="doneState" class="{% if creation.status != 'done' %}hidden{% endif %}">
+    <div class="text-6xl mb-6">🎉</div>
+    <h1 class="text-3xl font-black mb-2">Your Ad is Ready!</h1>
+    <p class="text-gray-400 text-sm mb-8">Download it and share anywhere.</p>
+
+    {% if creation.output_file %}
+    <div class="bg-dark-card border border-dark-border rounded-2xl overflow-hidden mb-6" id="outputPreview">
+      {% if creation.template.file_type == 'video' %}
+        {% if creation.output_thumbnail %}<img src="{{ creation.output_thumbnail.url }}" class="w-full max-h-80 object-contain" id="previewMedia">{% endif %}
+      {% else %}
+        <img src="{{ creation.output_file.url }}" class="w-full max-h-80 object-contain" id="previewMedia">
+      {% endif %}
+    </div>
+    <a href="{{ creation.output_file.url }}" download class="block bg-brand text-black font-bold py-4 rounded-2xl text-lg hover:opacity-90 mb-3">⬇️ Download Ad</a>
+    {% endif %}
+    <a href="{% url 'template_list' %}" class="block border border-dark-border text-white py-3 rounded-2xl hover:border-brand transition-all text-sm">Browse More Templates</a>
+  </div>
+
+  <div id="failedState" class="{% if creation.status != 'failed' %}hidden{% endif %}">
+    <div class="text-6xl mb-6">❌</div>
+    <h1 class="text-2xl font-bold mb-2">Processing Failed</h1>
+    <p class="text-gray-400 text-sm mb-2">{{ creation.error_message|default:"Something went wrong." }}</p>
+    <a href="{% url 'create_ad' creation.template.pk %}" class="block bg-brand text-black font-bold py-4 rounded-2xl mt-6 hover:opacity-90">Try Again</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if creation.status == 'pending' or creation.status == 'processing' %}
+function poll() {
+  fetch('{% url "creation_status_api" creation.pk %}')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('statusText').textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+      if (data.status === 'done') {
+        document.getElementById('processingState').classList.add('hidden');
+        document.getElementById('doneState').classList.remove('hidden');
+        if (data.output_url) {
+          const prev = document.getElementById('outputPreview');
+          if (prev) prev.innerHTML = `<img src="${data.output_url}" class="w-full max-h-80 object-contain">`;
+          document.querySelector('#doneState a[download]').href = data.output_url;
+        }
+      } else if (data.status === 'failed') {
+        document.getElementById('processingState').classList.add('hidden');
+        document.getElementById('failedState').classList.remove('hidden');
+      } else {
+        setTimeout(poll, 2500);
+      }
+    }).catch(() => setTimeout(poll, 3000));
+}
+setTimeout(poll, 2500);
+{% endif %}
+</script>
+{% endblock %}

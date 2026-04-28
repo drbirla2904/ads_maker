@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}Manage Templates – Admin{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-8">
+    <div><h1 class="text-2xl font-bold">🛠 Admin – Templates</h1><p class="text-gray-400 text-sm">{{ templates.count }} total templates</p></div>
+    <div class="flex gap-3">
+      <a href="{% url 'admin_categories' %}" class="border border-dark-border text-white px-4 py-2.5 rounded-full text-sm hover:border-brand">📂 Categories</a>
+      <a href="{% url 'admin_upload' %}" class="bg-brand text-black font-bold px-5 py-2.5 rounded-full text-sm hover:opacity-90">+ Upload Template</a>
+    </div>
+  </div>
+
+  <div class="bg-dark-card border border-dark-border rounded-2xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="border-b border-dark-border">
+        <tr class="text-left text-gray-400 text-xs">
+          <th class="px-4 py-3">Template</th>
+          <th class="px-4 py-3">Type</th>
+          <th class="px-4 py-3">Creator</th>
+          <th class="px-4 py-3">Stats</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Uploaded</th>
+          <th class="px-4 py-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in templates %}
+        <tr class="border-b border-dark-border hover:bg-dark-border/50 transition-colors">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-14 bg-dark-border rounded-lg overflow-hidden flex-shrink-0">
+                {% if t.thumbnail %}<img src="{{ t.thumbnail.url }}" class="w-full h-full object-cover">
+                {% elif t.file_type == 'image' %}<img src="{{ t.file.url }}" class="w-full h-full object-cover">
+                {% else %}<div class="w-full h-full flex items-center justify-center text-lg">🎬</div>{% endif %}
+              </div>
+              <div>
+                <p class="font-semibold text-white">{{ t.title|truncatechars:35 }}</p>
+                {% if t.category %}<p class="text-xs text-gray-500">{{ t.category.name }}</p>{% endif %}
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded-full text-xs {% if t.file_type == 'video' %}bg-purple-900 text-purple-300{% else %}bg-blue-900 text-blue-300{% endif %}">
+              {{ t.file_type|capfirst }}
+            </span>
+          </td>
+          <td class="px-4 py-3 text-gray-300">{{ t.creator.username }}</td>
+          <td class="px-4 py-3 text-gray-400 text-xs">
+            <p>♥ {{ t.likes_count }}</p>
+            <p>▶ {{ t.uses_count }}</p>
+          </td>
+          <td class="px-4 py-3">
+            <div class="flex flex-col gap-1">
+              {% if t.is_active %}<span class="text-xs text-green-400">● Active</span>{% else %}<span class="text-xs text-red-400">● Inactive</span>{% endif %}
+              {% if t.is_free %}<span class="text-xs text-brand">Free</span>{% else %}<span class="text-xs text-yellow-400">Pro</span>{% endif %}
+              {% if t.is_featured %}<span class="text-xs text-purple-400">⭐ Featured</span>{% endif %}
+            </div>
+          </td>
+          <td class="px-4 py-3 text-gray-500 text-xs">{{ t.created_at|date:"M d, Y" }}</td>
+          <td class="px-4 py-3">
+            <div class="flex gap-2">
+              <a href="{% url 'admin_edit_template' t.pk %}" class="px-3 py-1.5 bg-dark-border rounded-lg text-xs hover:bg-brand hover:text-black transition-colors">Edit</a>
+              <form method="POST" action="{% url 'admin_delete_template' t.pk %}" onsubmit="return confirm('Delete this template?')">
+                {% csrf_token %}
+                <button type="submit" class="px-3 py-1.5 bg-dark-border rounded-lg text-xs text-red-400 hover:bg-red-900 transition-colors">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-4 py-16 text-center text-gray-500">No templates yet. <a href="{% url 'admin_upload' %}" class="text-brand hover:underline">Upload the first one →</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

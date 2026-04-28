@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Templates – One Click Designer{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8">
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold mb-2">Templates</h1>
+    <p class="text-gray-400">Pick a template, upload your content, get your ad.</p>
+  </div>
+
+  <!-- Search + Filters -->
+  <form method="GET" class="mb-8">
+    <div class="flex gap-3 mb-4">
+      <input type="text" name="q" value="{{ current_q }}" placeholder='Search "Billboard", "Person Holding"...'
+        class="flex-1 bg-dark-card border border-dark-border rounded-full px-5 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand text-sm">
+      <button type="submit" class="bg-brand text-black px-6 py-3 rounded-full font-semibold text-sm hover:opacity-90">Search</button>
+    </div>
+    <div class="flex flex-wrap gap-2 items-center">
+      <!-- Sort -->
+      <select name="sort" onchange="this.form.submit()" class="bg-dark-card border border-dark-border text-sm text-white rounded-full px-4 py-2 focus:outline-none focus:border-brand">
+        <option value="newest" {% if current_sort == 'newest' %}selected{% endif %}>Newest</option>
+        <option value="popular" {% if current_sort == 'popular' %}selected{% endif %}>Most Popular</option>
+        <option value="most_used" {% if current_sort == 'most_used' %}selected{% endif %}>Most Used</option>
+      </select>
+      <!-- Type filter -->
+      <select name="type" onchange="this.form.submit()" class="bg-dark-card border border-dark-border text-sm text-white rounded-full px-4 py-2 focus:outline-none focus:border-brand">
+        <option value="">All Types</option>
+        <option value="image" {% if current_type == 'image' %}selected{% endif %}>Image</option>
+        <option value="video" {% if current_type == 'video' %}selected{% endif %}>Video</option>
+      </select>
+      <!-- Free filter -->
+      <label class="flex items-center gap-2 cursor-pointer bg-dark-card border border-dark-border rounded-full px-4 py-2 text-sm {% if current_free %}border-brand text-brand{% else %}text-gray-400{% endif %}">
+        <input type="checkbox" name="free" value="1" {% if current_free %}checked{% endif %} onchange="this.form.submit()" class="hidden">
+        Free Only
+      </label>
+      <!-- Category chips -->
+      {% for cat in categories %}
+      <a href="?category={{ cat.slug }}{% if current_q %}&q={{ current_q }}{% endif %}"
+        class="px-4 py-2 rounded-full text-sm border transition-colors
+        {% if current_category == cat.slug %}bg-brand text-black border-brand{% else %}bg-dark-card border-dark-border text-gray-300 hover:border-brand{% endif %}">
+        {{ cat.icon }} {{ cat.name }}
+      </a>
+      {% endfor %}
+      {% if current_category or current_q or current_type or current_free %}
+      <a href="{% url 'template_list' %}" class="px-4 py-2 rounded-full text-sm border border-red-800 text-red-400 hover:border-red-500">✕ Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <!-- Grid -->
+  {% if page_obj %}
+  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+    {% for t in page_obj %}{% include 'templates_app/_template_card.html' %}{% endfor %}
+  </div>
+
+  <!-- Pagination -->
+  {% if page_obj.has_other_pages %}
+  <div class="flex justify-center gap-2 mt-12">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}"
+       class="px-4 py-2 bg-dark-card border border-dark-border rounded-full text-sm hover:border-brand">← Prev</a>
+    {% endif %}
+    <span class="px-4 py-2 bg-brand text-black rounded-full text-sm font-semibold">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}{% if current_q %}&q={{ current_q }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}"
+       class="px-4 py-2 bg-dark-card border border-dark-border rounded-full text-sm hover:border-brand">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="text-center py-20 text-gray-500">
+    <div class="text-5xl mb-4">🔍</div>
+    <p class="text-xl font-semibold mb-2">No templates found</p>
+    <p class="text-sm">Try a different search or <a href="{% url 'template_list' %}" class="text-brand hover:underline">clear filters</a>.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

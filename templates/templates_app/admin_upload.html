@@ -1,0 +1,579 @@
+{% extends 'base.html' %}
+{% block title %}Upload Template – Admin{% endblock %}
+{% block extra_head %}
+<style>
+  #canvasWrapper { position: relative; display: inline-block; }
+  #previewCanvas { display: block; max-width: 100%; border-radius: 10px; }
+  .zone-handle {
+    position: absolute; width: 16px; height: 16px;
+    background: #C8FF00; border: 2.5px solid #000;
+    border-radius: 50%; transform: translate(-50%, -50%);
+    cursor: grab; z-index: 20; box-shadow: 0 0 6px rgba(200,255,0,0.8);
+  }
+  .zone-handle:active { cursor: grabbing; transform: translate(-50%,-50%) scale(1.3); }
+  .tab-btn {
+    padding: 7px 18px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 2px solid #2a2a2a; background: #1a1a1a; color: #aaa; cursor: pointer; transition: all 0.2s;
+  }
+  .tab-btn.active { background: #C8FF00; color: #000; border-color: #C8FF00; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center gap-4 mb-8">
+    <a href="{% url 'admin_templates' %}" class="text-gray-400 hover:text-brand text-sm">← Back</a>
+    <h1 class="text-2xl font-bold">Upload New Template</h1>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" id="mainForm">
+    {% csrf_token %}
+    <input type="hidden" name="zone_data" id="zoneDataInput" value="{}">
+    <input type="hidden" name="canvas_width" id="canvasWidthInput" value="1080">
+    <input type="hidden" name="canvas_height" id="canvasHeightInput" value="1920">
+
+    <div class="grid lg:grid-cols-2 gap-8">
+
+      <!-- ── LEFT: Zone Editor ── -->
+      <div class="space-y-5">
+
+        <!-- File drop -->
+        <div class="bg-dark-card border border-dark-border rounded-2xl p-5">
+          <h2 class="font-bold mb-3 text-brand">① Upload Template File</h2>
+          <div id="fileDropZone" onclick="document.getElementById('templateFile').click()"
+            class="border-2 border-dashed border-dark-border rounded-xl p-8 text-center cursor-pointer hover:border-brand transition-colors">
+            <div class="text-4xl mb-2" id="fileIcon">📁</div>
+            <p class="font-semibold text-white" id="fileLabel">Click or drag image / video here</p>
+            <p class="text-gray-500 text-xs mt-1">JPG PNG MP4 MOV — max 500 MB</p>
+            <input type="file" id="templateFile" name="template_file" class="hidden"
+              accept="image/*,video/*" onchange="handleTemplateFile(this)" required>
+          </div>
+        </div>
+
+        <!-- Zone drawing (image templates only) / Chroma info (video templates) -->
+        <div class="bg-dark-card border border-dark-border rounded-2xl p-5" id="zoneSection">
+          <h2 class="font-bold mb-1 text-brand" id="zoneSectionTitle">② Mark Replaceable Zone</h2>
+
+          <!-- VIDEO: chroma key notice -->
+          <div id="videoChromaInfo" class="hidden">
+            <div class="bg-brand/10 border border-brand/30 rounded-xl p-4 mb-4">
+              <div class="flex items-start gap-3">
+                <span class="text-2xl">🟢</span>
+                <div>
+                  <p class="text-brand font-bold text-sm mb-1">Auto Chroma Key Detection</p>
+                  <p class="text-gray-300 text-xs leading-relaxed">
+                    For video templates, <b class="text-white">no zone drawing needed</b>.<br>
+                    After upload, the system automatically scans your video for the
+                    <span class="text-brand">neon green zone</span> and uses FFmpeg chromakey
+                    to replace it with the user's ad on every frame — including tracking any motion.
+                  </p>
+                  <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-dark-border rounded-lg p-2">
+                      <p class="text-gray-500">Supported zone colors</p>
+                      <div class="flex gap-1 mt-1">
+                        <span class="px-2 py-0.5 rounded-full font-bold text-xs" style="background:#C8FF00;color:#000">Neon Green</span>
+                        <span class="px-2 py-0.5 rounded-full font-bold text-xs bg-green-600 text-white">Pure Green</span>
+                        <span class="px-2 py-0.5 rounded-full font-bold text-xs bg-blue-600 text-white">Blue</span>
+                      </div>
+                    </div>
+                    <div class="bg-dark-border rounded-lg p-2">
+                      <p class="text-gray-500">How to prepare your video</p>
+                      <p class="text-white mt-0.5">Film with a neon green board/surface in the zone area</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- IMAGE: zone drawing tool -->
+          <div id="imageZoneEditor">
+            <p class="text-gray-400 text-xs mb-4">Draw the area where users paste their ad. Drag corner handles to fine-tune perspective.</p>
+
+            <div class="flex gap-2 mb-4 flex-wrap">
+              <button type="button" class="tab-btn active" id="tab-rect"  onclick="setMode('rect')">▭ Rectangle</button>
+              <button type="button" class="tab-btn"        id="tab-persp" onclick="setMode('perspective')">⬟ Perspective (4 pts)</button>
+              <button type="button" class="tab-btn"        id="tab-clear" onclick="clearZone()">🗑 Clear</button>
+            </div>
+
+            <div id="canvasContainer" class="bg-dark-border rounded-xl overflow-hidden min-h-[80px] flex items-center justify-center">
+              <p id="noFileMsg" class="text-gray-500 text-sm py-10">Upload an image to start marking the zone</p>
+              <div id="canvasWrapper" class="hidden">
+                <canvas id="previewCanvas"></canvas>
+              </div>
+            </div>
+
+            <div id="zoneStatusBar" class="mt-3 hidden">
+              <div class="flex items-center gap-2 bg-brand/10 border border-brand/30 rounded-xl px-4 py-2">
+                <span class="text-brand text-lg">✅</span>
+                <div>
+                  <p class="text-brand text-xs font-bold">Zone defined</p>
+                  <p class="text-gray-400 text-xs" id="zoneStatusText"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 space-y-1 text-xs text-gray-500">
+              <p id="hint-rect">💡 <b class="text-gray-300">Rectangle:</b> Click and drag to draw the zone area.</p>
+              <p id="hint-persp" class="hidden">💡 <b class="text-gray-300">Perspective:</b> Click 4 corners: Top-Left → Top-Right → Bottom-Right → Bottom-Left.</p>
+              <p>💡 Drag the <span class="text-brand">green handles</span> to fine-tune any corner.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RIGHT: Template Details ── -->
+      <div class="space-y-5">
+        <div class="bg-dark-card border border-dark-border rounded-2xl p-5">
+          <h2 class="font-bold mb-4 text-brand">③ Template Details</h2>
+          <div class="space-y-4">
+
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Title *</label>
+              <input type="text" name="title" required placeholder="e.g. Man Holding Placard Street"
+                class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+            </div>
+
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Description</label>
+              <textarea name="description" rows="3" placeholder="Describe this template..."
+                class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand resize-none"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-gray-400 mb-1 block">Category</label>
+                <select name="category" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+                  <option value="">None</option>
+                  {% for cat in categories %}<option value="{{ cat.pk }}">{{ cat.icon }} {{ cat.name }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 mb-1 block">Orientation</label>
+                <select name="orientation" class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+                  <option value="portrait">Portrait (9:16)</option>
+                  <option value="landscape">Landscape (16:9)</option>
+                  <option value="square">Square (1:1)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Tags (comma separated)</label>
+              <input type="text" name="tags" placeholder="billboard, street, outdoor, person holding"
+                class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-brand">
+            </div>
+
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Custom Thumbnail <span class="text-gray-500">(optional)</span></label>
+              <input type="file" name="thumbnail_file" accept="image/*"
+                class="w-full bg-dark-border border border-dark-border rounded-xl px-4 py-3 text-white text-sm file:bg-brand file:text-black file:border-0 file:rounded-full file:px-3 file:py-1 file:mr-3 file:text-xs file:font-bold cursor-pointer">
+            </div>
+
+            <div class="flex gap-6 pt-1">
+              <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                <input type="checkbox" name="is_free" checked class="accent-brand w-4 h-4"> Free Template
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                <input type="checkbox" name="is_featured" class="accent-brand w-4 h-4"> Featured
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" id="submitBtn"
+          class="w-full bg-brand text-black font-black py-4 rounded-2xl text-lg hover:opacity-90 transition-all">
+          🚀 Upload Template
+        </button>
+      </div>
+
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ──────────────────────────────────────────────
+// State
+// ──────────────────────────────────────────────
+let mode = 'rect';
+let drawing = false;
+let startX = 0, startY = 0;
+let rectZone  = null;       // {x,y,w,h} in canvas pixels
+let perspPts  = [];         // [[cx,cy]…] up to 4, canvas pixels
+let handles   = [];
+let draggingHandle = null;
+let imgNatW = 1, imgNatH = 1, canvasScale = 1;
+
+const canvas  = document.getElementById('previewCanvas');
+const ctx     = canvas.getContext('2d');
+const wrapper = document.getElementById('canvasWrapper');
+
+// ──────────────────────────────────────────────
+// Mode switching
+// ──────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  ['rect','persp'].forEach(id => {
+    const btn = document.getElementById('tab-'+id);
+    const active = (id === 'rect' ? 'rect' : 'perspective') === m;
+    btn.classList.toggle('active', active);
+  });
+  document.getElementById('hint-rect').classList.toggle('hidden', m !== 'rect');
+  document.getElementById('hint-persp').classList.toggle('hidden', m !== 'perspective');
+  clearZone(false); // clear zone but keep canvas image
+}
+
+// ──────────────────────────────────────────────
+// File load — image or video frame
+// ──────────────────────────────────────────────
+function handleTemplateFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const isVideo = file.type.startsWith('video') || file.name.match(/\.(mp4|mov|avi|webm)$/i);
+  document.getElementById('fileIcon').textContent = isVideo ? '🎬' : '🖼️';
+  document.getElementById('fileLabel').textContent = file.name;
+
+  // Show/hide zone editor vs chroma notice based on file type
+  document.getElementById('videoChromaInfo').classList.toggle('hidden', !isVideo);
+  document.getElementById('imageZoneEditor').classList.toggle('hidden', isVideo);
+  document.getElementById('zoneSectionTitle').textContent = isVideo
+    ? '② Chroma Zone (Auto-Detected on Upload)'
+    : '② Mark Replaceable Zone';
+
+  if (isVideo) {
+    // For video: extract a preview frame to show what the template looks like
+    const vid = document.createElement('video');
+    vid.muted = true; vid.preload = 'metadata';
+    vid.onloadeddata = () => {
+      imgNatW = vid.videoWidth; imgNatH = vid.videoHeight;
+      document.getElementById('canvasWidthInput').value  = imgNatW;
+      document.getElementById('canvasHeightInput').value = imgNatH;
+      vid.currentTime = 0.5;
+    };
+    vid.onseeked = () => {
+      // Show video preview inside canvasContainer
+      document.getElementById('noFileMsg').classList.add('hidden');
+      const previewVid = document.createElement('video');
+      previewVid.src = URL.createObjectURL(file);
+      previewVid.autoplay = true; previewVid.muted = true;
+      previewVid.loop = true; previewVid.playsInline = true;
+      previewVid.style.cssText = 'width:100%;max-height:300px;object-fit:contain;border-radius:10px;';
+      const container = document.getElementById('canvasContainer');
+      container.innerHTML = '';
+      container.appendChild(previewVid);
+    };
+    vid.src = URL.createObjectURL(file);
+    return;
+  }
+
+  // Image: load into canvas for zone drawing
+  if (file.type.startsWith('image/')) {
+    const img = new Image();
+    img.onload = () => {
+      imgNatW = img.naturalWidth; imgNatH = img.naturalHeight;
+      document.getElementById('canvasWidthInput').value  = imgNatW;
+      document.getElementById('canvasHeightInput').value = imgNatH;
+      initCanvas(img);
+    };
+    img.src = URL.createObjectURL(file);
+  }
+}
+
+function initCanvas(img) {
+  document.getElementById('noFileMsg').classList.add('hidden');
+  wrapper.classList.remove('hidden');
+  wrapper.style.display = 'inline-block';
+
+  const container = document.getElementById('canvasContainer');
+  const maxW = container.clientWidth - 4;
+  const maxH = 540;
+  canvasScale = Math.min(1, maxW / imgNatW, maxH / imgNatH);
+  canvas.width  = Math.round(imgNatW * canvasScale);
+  canvas.height = Math.round(imgNatH * canvasScale);
+  canvas._img   = img;
+
+  redraw();
+  bindCanvasEvents();
+}
+
+// ──────────────────────────────────────────────
+// Redraw — image + green zone overlay + text
+// ──────────────────────────────────────────────
+function redraw() {
+  if (!canvas._img) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(canvas._img, 0, 0, canvas.width, canvas.height);
+
+  let pts4 = null; // 4 canvas-pixel corners [[x,y]…]
+
+  if (mode === 'rect' && rectZone) {
+    const {x, y, w, h} = rectZone;
+    pts4 = [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+  } else if (mode === 'perspective' && perspPts.length > 0) {
+    pts4 = perspPts.length === 4 ? perspPts : null;
+    // draw partial click points
+    perspPts.forEach((p, i) => {
+      const labels = ['TL','TR','BR','BL'];
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 6, 0, Math.PI*2);
+      ctx.fillStyle = '#C8FF00';
+      ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(labels[i] || (i+1)+'', p[0], p[1]);
+    });
+  }
+
+  if (pts4) drawZoneOverlay(pts4);
+  updateZoneData();
+}
+
+function drawZoneOverlay(pts) {
+  // ── filled polygon ──
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  pts.forEach(p => ctx.lineTo(p[0], p[1]));
+  ctx.closePath();
+
+  // Semi-transparent green fill
+  ctx.fillStyle = 'rgba(200,255,0,0.28)';
+  ctx.fill();
+
+  // Bright green dashed border
+  ctx.strokeStyle = '#C8FF00';
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([8, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Corner dots
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 6, 0, Math.PI*2);
+    ctx.fillStyle = '#C8FF00';
+    ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+  });
+
+  // ── "YOUR AD" label in center ──
+  const cx = pts.reduce((s,p) => s+p[0], 0) / 4;
+  const cy = pts.reduce((s,p) => s+p[1], 0) / 4;
+
+  // Dynamic font size based on zone width
+  const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+  const zw = Math.max(...xs) - Math.min(...xs);
+  const zh = Math.max(...ys) - Math.min(...ys);
+  const fs = Math.max(11, Math.min(28, zw / 7));
+
+  // Badge background
+  const label  = 'YOUR AD';
+  const label2 = '📸 Place Here';
+  ctx.font = `bold ${fs}px sans-serif`;
+  const tw = ctx.measureText(label).width;
+  const bw = tw + fs * 1.4, bh = fs * 3.6;
+  const bx = cx - bw/2, by = cy - bh/2;
+
+  // Rounded rect background
+  roundRect(ctx, bx, by, bw, bh, 8);
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fill();
+  ctx.strokeStyle = '#C8FF00';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Main text
+  ctx.fillStyle = '#C8FF00';
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, cx, cy - fs * 0.1);
+
+  // Sub text
+  const subFs = Math.max(9, fs * 0.55);
+  ctx.font = `${subFs}px sans-serif`;
+  ctx.fillStyle = 'rgba(200,255,0,0.7)';
+  ctx.fillText(label2, cx, cy + subFs * 1.6);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// ──────────────────────────────────────────────
+// Mouse / touch events on canvas
+// ──────────────────────────────────────────────
+function bindCanvasEvents() {
+  canvas.style.cursor = 'crosshair';
+
+  canvas.onmousedown = (e) => {
+    const {x, y} = canvasXY(e);
+    if (mode === 'rect') {
+      drawing = true; startX = x; startY = y;
+      rectZone = null; clearHandles(); redraw();
+    } else {
+      if (perspPts.length < 4) {
+        perspPts.push([x, y]);
+        redraw();
+        if (perspPts.length === 4) buildHandles();
+      }
+    }
+  };
+
+  canvas.onmousemove = (e) => {
+    if (!drawing || mode !== 'rect') return;
+    const {x, y} = canvasXY(e);
+    rectZone = { x: Math.min(startX,x), y: Math.min(startY,y),
+                 w: Math.abs(x-startX),  h: Math.abs(y-startY) };
+    redraw();
+  };
+
+  canvas.onmouseup = (e) => {
+    if (drawing && mode === 'rect') {
+      drawing = false;
+      if (rectZone && rectZone.w > 8 && rectZone.h > 8) buildHandles();
+      else { rectZone = null; redraw(); }
+    }
+  };
+
+  canvas.ontouchstart = (e) => { e.preventDefault(); canvas.onmousedown(e.touches[0]); };
+  canvas.ontouchmove  = (e) => { e.preventDefault(); canvas.onmousemove(e.touches[0]); };
+  canvas.ontouchend   = (e) => { e.preventDefault(); canvas.onmouseup(e.changedTouches[0]); };
+}
+
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(canvas.width,  e.clientX - r.left)),
+    y: Math.max(0, Math.min(canvas.height, e.clientY - r.top))
+  };
+}
+
+// ──────────────────────────────────────────────
+// Draggable corner handles
+// ──────────────────────────────────────────────
+function buildHandles() {
+  clearHandles();
+  const pts = getCanvasPts();
+  pts.forEach((pt, i) => {
+    const h = document.createElement('div');
+    h.className = 'zone-handle';
+    h.style.left = (pt[0] + canvas.offsetLeft) + 'px';
+    h.style.top  = (pt[1] + canvas.offsetTop)  + 'px';
+    h.dataset.idx = i;
+    wrapper.appendChild(h);
+    handles.push(h);
+
+    h.onmousedown = (e) => { e.stopPropagation(); draggingHandle = h; };
+    h.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); draggingHandle = h; };
+  });
+
+  document.onmousemove = (e) => moveHandle(e.clientX, e.clientY);
+  document.ontouchmove = (e) => { if (draggingHandle) { e.preventDefault(); moveHandle(e.touches[0].clientX, e.touches[0].clientY); }};
+  document.onmouseup = document.ontouchend = () => { draggingHandle = null; };
+}
+
+function moveHandle(clientX, clientY) {
+  if (!draggingHandle) return;
+  const wr = wrapper.getBoundingClientRect();
+  let nx = clientX - wr.left - canvas.offsetLeft;
+  let ny = clientY - wr.top  - canvas.offsetTop;
+  nx = Math.max(0, Math.min(canvas.width,  nx));
+  ny = Math.max(0, Math.min(canvas.height, ny));
+
+  draggingHandle.style.left = (nx + canvas.offsetLeft) + 'px';
+  draggingHandle.style.top  = (ny + canvas.offsetTop)  + 'px';
+
+  const idx = parseInt(draggingHandle.dataset.idx);
+  if (mode === 'rect') {
+    const corners = getCanvasPts();
+    corners[idx] = [nx, ny];
+    const xs = corners.map(c=>c[0]), ys = corners.map(c=>c[1]);
+    rectZone = {x: Math.min(...xs), y: Math.min(...ys),
+                w: Math.max(...xs)-Math.min(...xs), h: Math.max(...ys)-Math.min(...ys)};
+  } else {
+    perspPts[idx] = [nx, ny];
+  }
+  redraw();
+}
+
+function getCanvasPts() {
+  if (mode === 'rect' && rectZone) {
+    const {x,y,w,h} = rectZone;
+    return [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+  }
+  return perspPts.slice(0,4);
+}
+
+function clearHandles() { handles.forEach(h => h.remove()); handles = []; }
+
+// ──────────────────────────────────────────────
+// Zone data → hidden input + status bar
+// ──────────────────────────────────────────────
+function updateZoneData() {
+  const sc = 1 / canvasScale;
+  let zone = {};
+
+  if (mode === 'rect' && rectZone) {
+    const {x,y,w,h} = rectZone;
+    const pts = [[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(p=>[Math.round(p[0]*sc),Math.round(p[1]*sc)]);
+    zone = { x: Math.round(x*sc), y: Math.round(y*sc),
+             width: Math.round(w*sc), height: Math.round(h*sc), points: pts };
+  } else if (mode === 'perspective' && perspPts.length === 4) {
+    const pts = perspPts.map(p=>[Math.round(p[0]*sc), Math.round(p[1]*sc)]);
+    const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+    zone = { points: pts,
+             x: Math.min(...xs), y: Math.min(...ys),
+             width: Math.max(...xs)-Math.min(...xs),
+             height: Math.max(...ys)-Math.min(...ys) };
+  }
+
+  const hasZone = Object.keys(zone).length > 0;
+  document.getElementById('zoneDataInput').value = hasZone ? JSON.stringify(zone) : '{}';
+  document.getElementById('zoneStatusBar').classList.toggle('hidden', !hasZone);
+  if (hasZone) {
+    document.getElementById('zoneStatusText').textContent =
+      `${zone.width}×${zone.height}px at (${zone.x}, ${zone.y}) · ${zone.points.length} corner points saved`;
+  }
+}
+
+function clearZone(redrawCanvas = true) {
+  rectZone = null; perspPts = [];
+  clearHandles();
+  document.getElementById('zoneDataInput').value = '{}';
+  document.getElementById('zoneStatusBar').classList.add('hidden');
+  if (redrawCanvas && canvas._img) redraw();
+}
+
+// ──────────────────────────────────────────────
+// Drag-drop file upload
+// ──────────────────────────────────────────────
+const fDrop = document.getElementById('fileDropZone');
+fDrop.addEventListener('dragover',  e => { e.preventDefault(); fDrop.classList.add('border-brand'); });
+fDrop.addEventListener('dragleave', () => fDrop.classList.remove('border-brand'));
+fDrop.addEventListener('drop', e => {
+  e.preventDefault(); fDrop.classList.remove('border-brand');
+  const inp = document.getElementById('templateFile');
+  inp.files = e.dataTransfer.files;
+  handleTemplateFile(inp);
+});
+
+document.getElementById('mainForm').onsubmit = function() {
+  document.getElementById('submitBtn').textContent = '⏳ Uploading...';
+  document.getElementById('submitBtn').disabled = true;
+};
+</script>
+{% endblock %}

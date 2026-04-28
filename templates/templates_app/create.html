@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+{% block title %}Create Ad – {{ template.title }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .cropper-wrap { position:relative; overflow:hidden; background:#111; border-radius:12px; cursor:grab; user-select:none; }
+  .cropper-wrap:active { cursor:grabbing; }
+  .cropper-img { position:absolute; transform-origin:center center; pointer-events:none; }
+  .crop-overlay { position:absolute; inset:0; pointer-events:none; }
+  .crop-box { position:absolute; border:2.5px solid #C8FF00; box-shadow:0 0 0 9999px rgba(0,0,0,0.55); pointer-events:none; }
+  .crop-corner { position:absolute; width:14px; height:14px; border-color:#C8FF00; border-style:solid; }
+  .tl { top:-1px; left:-1px; border-width:3px 0 0 3px; }
+  .tr { top:-1px; right:-1px; border-width:3px 3px 0 0; }
+  .bl { bottom:-1px; left:-1px; border-width:0 0 3px 3px; }
+  .br { bottom:-1px; right:-1px; border-width:0 3px 3px 0; }
+  .crop-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#C8FF00; font-size:11px; font-weight:700; letter-spacing:.05em; text-shadow:0 0 8px rgba(0,0,0,.8); white-space:nowrap; pointer-events:none; }
+  input[type=range] { accent-color:#C8FF00; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-10">
+  <a href="{% url 'template_detail' template.pk %}" class="inline-flex items-center gap-2 text-gray-400 hover:text-brand text-sm mb-6">← Back</a>
+  <h1 class="text-2xl font-bold mb-1">Create Your Ad</h1>
+  <p class="text-gray-400 text-sm mb-6">Template: <span class="text-brand">{{ template.title }}</span></p>
+
+  <!-- Step 1: Upload -->
+  <div id="stepUpload" class="bg-dark-card border border-dark-border rounded-2xl p-5 mb-5">
+    <p class="text-xs text-brand font-bold mb-3 uppercase tracking-widest">Step 1 — Upload Your Content</p>
+    <div id="dropZone" onclick="document.getElementById('fileInput').click()"
+      class="border-2 border-dashed border-dark-border rounded-xl p-8 text-center cursor-pointer hover:border-brand transition-colors">
+      <div class="text-4xl mb-2" id="dropIcon">📤</div>
+      <p class="font-semibold text-white" id="dropLabel">Click or drag to upload image / video</p>
+      <p class="text-gray-500 text-xs mt-1">JPG · PNG · MP4 · MOV</p>
+      <input type="file" id="fileInput" class="hidden"
+        accept="{% if template.file_type == 'video' %}image/*,video/*{% else %}image/*{% endif %}"
+        onchange="onFileSelected(this)">
+    </div>
+  </div>
+
+  <!-- Step 2: Crop -->
+  <div id="stepCrop" class="bg-dark-card border border-dark-border rounded-2xl p-5 mb-5 hidden">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-xs text-brand font-bold uppercase tracking-widest">Step 2 — Position Your Content</p>
+      <span class="text-xs text-gray-500">Drag to pan · Pinch/scroll to zoom</span>
+    </div>
+
+    <!-- Cropper -->
+    <div id="cropperWrap" class="cropper-wrap w-full" style="height:420px;">
+      <img id="cropperImg" class="cropper-img" draggable="false">
+      <div class="crop-overlay">
+        <div id="cropBox" class="crop-box">
+          <div class="crop-corner tl"></div>
+          <div class="crop-corner tr"></div>
+          <div class="crop-corner bl"></div>
+          <div class="crop-corner br"></div>
+          <span class="crop-label">YOUR AD ZONE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom slider -->
+    <div class="flex items-center gap-3 mt-4">
+      <span class="text-xs text-gray-400">🔍</span>
+      <input type="range" id="zoomSlider" min="50" max="300" value="100" class="flex-1"
+        oninput="setZoom(this.value/100)">
+      <span class="text-xs text-gray-400" id="zoomLabel">100%</span>
+    </div>
+
+    <!-- Aspect ratio info -->
+    <div class="flex gap-2 mt-3">
+      <button onclick="fitFill()" class="flex-1 bg-brand/20 border border-brand/40 text-brand text-xs font-bold py-2 rounded-lg hover:bg-brand/30">⬛ Fill Zone</button>
+      <button onclick="fitContain()" class="flex-1 bg-dark-border text-gray-300 text-xs font-bold py-2 rounded-lg hover:bg-dark-border/80">☐ Fit Inside</button>
+      <button onclick="resetCrop()" class="px-4 bg-dark-border text-gray-500 text-xs font-bold py-2 rounded-lg hover:bg-dark-border/80">↺ Reset</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Submit -->
+  <div id="stepSubmit" class="hidden">
+    <form method="POST" enctype="multipart/form-data" id="mainForm">
+      {% csrf_token %}
+      <input type="hidden" name="crop_x" id="hidCropX" value="0">
+      <input type="hidden" name="crop_y" id="hidCropY" value="0">
+      <input type="hidden" name="crop_w" id="hidCropW" value="0">
+      <input type="hidden" name="crop_h" id="hidCropH" value="0">
+      <input type="hidden" name="crop_scale" id="hidCropScale" value="1">
+      <!-- File is sent via FormData from JS -->
+    </form>
+
+    <button onclick="submitAd()" id="submitBtn"
+      class="w-full bg-brand text-black font-black py-4 rounded-2xl text-lg hover:opacity-90 transition-all">
+      🚀 Create My Ad
+    </button>
+    <p class="text-center text-gray-500 text-xs mt-2">Renders in 10–60 seconds</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let file = null;
+let isVideo = false;
+let imgNatW = 0, imgNatH = 0;
+
+// Zone dimensions (from template — in the cropper display space)
+// We'll use fixed display crop box proportional to zone aspect ratio
+const ZONE_ASPECT = {{ template.canvas_width|default:1 }} > 0
+  ? ({% if template.get_zone.width %}{{ template.get_zone.width }}{% else %}481{% endif %} /
+     {% if template.get_zone.height %}{{ template.get_zone.height }}{% else %}470{% endif %})
+  : 1.02;  // fallback near-square
+
+const DISPLAY_H = 420;  // cropper display height px
+const DISPLAY_W = document.getElementById('cropperWrap')?.offsetWidth || 400;
+
+// Crop box in display space
+let boxW = Math.min(DISPLAY_W * 0.75, DISPLAY_H * ZONE_ASPECT);
+let boxH = boxW / ZONE_ASPECT;
+if (boxH > DISPLAY_H * 0.85) { boxH = DISPLAY_H * 0.85; boxW = boxH * ZONE_ASPECT; }
+const boxX = (DISPLAY_W - boxW) / 2;
+const boxY = (DISPLAY_H - boxH) / 2;
+
+// Image pan/zoom state
+let imgX = 0, imgY = 0, imgScale = 1;
+let dragStart = null;
+
+// ── File selection ────────────────────────────────────────────────────────────
+function onFileSelected(input) {
+  file = input.files[0];
+  if (!file) return;
+  isVideo = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm)$/i.test(file.name);
+  document.getElementById('dropIcon').textContent = isVideo ? '🎬' : '🖼️';
+  document.getElementById('dropLabel').textContent = file.name;
+
+  if (isVideo) {
+    // For video: skip cropper, go straight to submit
+    document.getElementById('stepCrop').classList.add('hidden');
+    document.getElementById('stepSubmit').classList.remove('hidden');
+    // Set full-frame crop (server will fill-crop)
+    document.getElementById('hidCropX').value = 0;
+    document.getElementById('hidCropY').value = 0;
+    document.getElementById('hidCropW').value = 0;
+    document.getElementById('hidCropH').value = 0;
+    return;
+  }
+
+  // Image: show cropper
+  const img = document.getElementById('cropperImg');
+  img.onload = () => {
+    imgNatW = img.naturalWidth;
+    imgNatH = img.naturalHeight;
+    initCropper();
+    document.getElementById('stepCrop').classList.remove('hidden');
+    document.getElementById('stepSubmit').classList.remove('hidden');
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+// ── Cropper init ─────────────────────────────────────────────────────────────
+function initCropper() {
+  const wrap = document.getElementById('cropperWrap');
+  const wW = wrap.offsetWidth, wH = DISPLAY_H;
+  wrap.style.height = DISPLAY_H + 'px';
+
+  // Position crop box
+  const box = document.getElementById('cropBox');
+  box.style.left   = boxX + 'px';
+  box.style.top    = boxY + 'px';
+  box.style.width  = boxW + 'px';
+  box.style.height = boxH + 'px';
+
+  // Initial: fill crop (scale image to fill box, center it)
+  fitFill();
+  bindCropperEvents(wrap);
+}
+
+function fitFill() {
+  // Scale image so it fills the crop box completely (cover)
+  const scaleX = boxW / imgNatW;
+  const scaleY = boxH / imgNatH;
+  imgScale = Math.max(scaleX, scaleY);
+
+  // Center image on box center
+  const cx = boxX + boxW / 2;
+  const cy = boxY + boxH / 2;
+  imgX = cx - (imgNatW * imgScale) / 2;
+  imgY = cy - (imgNatH * imgScale) / 2;
+
+  updateImage();
+  document.getElementById('zoomSlider').value = Math.round(imgScale / Math.max(boxW/imgNatW, boxH/imgNatH) * 100);
+  updateZoomLabel();
+}
+
+function fitContain() {
+  // Scale image to fit inside box (letterbox)
+  const scaleX = boxW / imgNatW;
+  const scaleY = boxH / imgNatH;
+  imgScale = Math.min(scaleX, scaleY);
+
+  const cx = boxX + boxW / 2;
+  const cy = boxY + boxH / 2;
+  imgX = cx - (imgNatW * imgScale) / 2;
+  imgY = cy - (imgNatH * imgScale) / 2;
+
+  updateImage();
+}
+
+function resetCrop() { fitFill(); }
+
+function setZoom(factor) {
+  const minScale = Math.max(boxW / imgNatW, boxH / imgNatH);
+  const newScale = minScale * factor;
+  // Zoom around box center
+  const cx = boxX + boxW / 2;
+  const cy = boxY + boxH / 2;
+  imgX = cx - (cx - imgX) * (newScale / imgScale);
+  imgY = cy - (cy - imgY) * (newScale / imgScale);
+  imgScale = newScale;
+  clampImage();
+  updateImage();
+  updateZoomLabel();
+}
+
+function updateZoomLabel() {
+  const minScale = Math.max(boxW / imgNatW, boxH / imgNatH);
+  document.getElementById('zoomLabel').textContent = Math.round(imgScale / minScale * 100) + '%';
+}
+
+function clampImage() {
+  // Ensure image always covers the crop box (no gaps)
+  const iW = imgNatW * imgScale;
+  const iH = imgNatH * imgScale;
+
+  // Left edge: imgX must be <= boxX
+  if (imgX > boxX) imgX = boxX;
+  // Right edge: imgX + iW must be >= boxX + boxW
+  if (imgX + iW < boxX + boxW) imgX = boxX + boxW - iW;
+  // Top edge
+  if (imgY > boxY) imgY = boxY;
+  // Bottom edge
+  if (imgY + iH < boxY + boxH) imgY = boxY + boxH - iH;
+}
+
+function updateImage() {
+  const img = document.getElementById('cropperImg');
+  img.style.width  = (imgNatW * imgScale) + 'px';
+  img.style.height = (imgNatH * imgScale) + 'px';
+  img.style.left   = imgX + 'px';
+  img.style.top    = imgY + 'px';
+  updateCropData();
+}
+
+function updateCropData() {
+  // Convert display crop box back to natural image coordinates
+  // box position in image space
+  const cropNatX = (boxX - imgX) / imgScale;
+  const cropNatY = (boxY - imgY) / imgScale;
+  const cropNatW = boxW / imgScale;
+  const cropNatH = boxH / imgScale;
+
+  document.getElementById('hidCropX').value = Math.round(cropNatX);
+  document.getElementById('hidCropY').value = Math.round(cropNatY);
+  document.getElementById('hidCropW').value = Math.round(cropNatW);
+  document.getElementById('hidCropH').value = Math.round(cropNatH);
+  document.getElementById('hidCropScale').value = imgScale.toFixed(4);
+}
+
+// ── Drag events ───────────────────────────────────────────────────────────────
+function bindCropperEvents(wrap) {
+  wrap.addEventListener('mousedown', e => { dragStart = {x: e.clientX - imgX, y: e.clientY - imgY}; });
+  document.addEventListener('mousemove', e => {
+    if (!dragStart) return;
+    imgX = e.clientX - dragStart.x;
+    imgY = e.clientY - dragStart.y;
+    clampImage(); updateImage();
+  });
+  document.addEventListener('mouseup', () => dragStart = null);
+
+  // Touch
+  let lastTouchDist = null;
+  wrap.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      dragStart = {x: e.touches[0].clientX - imgX, y: e.touches[0].clientY - imgY};
+    }
+  }, {passive:true});
+  wrap.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && dragStart) {
+      imgX = e.touches[0].clientX - dragStart.x;
+      imgY = e.touches[0].clientY - dragStart.y;
+      clampImage(); updateImage();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (lastTouchDist) {
+        const factor = dist / lastTouchDist;
+        const minScale = Math.max(boxW / imgNatW, boxH / imgNatH);
+        imgScale = Math.max(minScale, Math.min(imgScale * factor, minScale * 5));
+        clampImage(); updateImage();
+      }
+      lastTouchDist = dist;
+    }
+  }, {passive:true});
+  wrap.addEventListener('touchend', () => { dragStart = null; lastTouchDist = null; });
+
+  // Scroll zoom
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const minScale = Math.max(boxW / imgNatW, boxH / imgNatH);
+    imgScale = Math.max(minScale, Math.min(imgScale * delta, minScale * 5));
+    const slider = document.getElementById('zoomSlider');
+    slider.value = Math.round(imgScale / minScale * 100);
+    clampImage(); updateImage(); updateZoomLabel();
+  }, {passive: false});
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitAd() {
+  if (!file) return;
+  updateCropData();
+
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = '⏳ Processing...';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('user_file', file);
+  fd.append('crop_x', document.getElementById('hidCropX').value);
+  fd.append('crop_y', document.getElementById('hidCropY').value);
+  fd.append('crop_w', document.getElementById('hidCropW').value);
+  fd.append('crop_h', document.getElementById('hidCropH').value);
+  fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+  try {
+    const res = await fetch('{% url "create_ad" template.pk %}', {method:'POST', body:fd});
+    if (res.redirected) { window.location.href = res.url; return; }
+    const text = await res.text();
+    // Parse redirect from response
+    const match = text.match(/href="([^"]*creation[^"]*)"/);
+    if (match) window.location.href = match[1];
+    else window.location.href = '{% url "my_creations" %}';
+  } catch(e) {
+    btn.textContent = '🚀 Create My Ad';
+    btn.disabled = false;
+    alert('Upload failed — please try again');
+  }
+}
+
+// Drag-drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('border-brand'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('border-brand'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('border-brand');
+  document.getElementById('fileInput').files = e.dataTransfer.files;
+  onFileSelected(document.getElementById('fileInput'));
+});
+</script>
+{% endblock %}

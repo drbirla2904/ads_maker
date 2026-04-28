@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold mb-2">Dashboard</h1>
+  <p class="text-gray-400 text-sm mb-8">Welcome back, <span class="text-brand">{{ user.username }}</span></p>
+  <div class="grid md:grid-cols-3 gap-4 mb-10">
+    <div class="bg-dark-card border border-dark-border rounded-2xl p-5 text-center">
+      <p class="text-3xl font-black text-brand">{{ creations|length }}</p>
+      <p class="text-gray-400 text-sm mt-1">Ads Created</p>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-2xl p-5 text-center">
+      <p class="text-3xl font-black text-brand">{{ creations|length }}</p>
+      <p class="text-gray-400 text-sm mt-1">Downloads</p>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-2xl p-5 text-center">
+      <p class="text-3xl font-black text-brand">Free</p>
+      <p class="text-gray-400 text-sm mt-1">Current Plan</p>
+    </div>
+  </div>
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-bold">Recent Creations</h2>
+    <a href="{% url 'my_creations' %}" class="text-brand text-sm hover:underline">View all →</a>
+  </div>
+  {% if creations %}
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {% for c in creations %}
+    <div class="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+      <div class="aspect-[9/16] bg-dark-border">
+        {% if c.status == 'done' and c.output_file %}<img src="{{ c.output_file.url }}" class="w-full h-full object-cover">
+        {% else %}<div class="w-full h-full flex items-center justify-center text-2xl">{% if c.status == 'failed' %}❌{% else %}⏳{% endif %}</div>{% endif %}
+      </div>
+      <div class="p-2"><p class="text-xs text-white truncate">{{ c.template.title }}</p></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-16 text-gray-500">
+    <p class="mb-4">No ads yet! Create your first one.</p>
+    <a href="{% url 'template_list' %}" class="bg-brand text-black font-bold px-6 py-3 rounded-full hover:opacity-90">Browse Templates</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

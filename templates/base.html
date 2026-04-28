@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}OneClick Designer{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#C8FF00', dark: '#a8d900' },
+            dark: { DEFAULT: '#0f0f0f', card: '#1a1a1a', border: '#2a2a2a' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #0f0f0f; color: #fff; font-family: 'Inter', sans-serif; }
+    .brand-gradient { background: linear-gradient(135deg, #C8FF00, #a8d900); }
+    .card-hover { transition: transform 0.2s, box-shadow 0.2s; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(200,255,0,0.15); }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .zone-overlay { background: rgba(200,255,0,0.15); border: 2px dashed #C8FF00; }
+    @keyframes pulse-brand { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .animate-pulse-brand { animation: pulse-brand 2s infinite; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen">
+
+<!-- Navbar -->
+<nav class="sticky top-0 z-50 bg-dark-card border-b border-dark-border backdrop-blur">
+  <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+    <a href="{% url 'home' %}" class="flex items-center gap-2">
+      <div class="w-8 h-8 brand-gradient rounded-full flex items-center justify-center text-black font-bold text-sm">OC</div>
+      <span class="font-bold text-white text-lg">One Click <span class="text-brand">Designer</span></span>
+    </a>
+
+    <div class="hidden md:flex items-center gap-6">
+      <a href="{% url 'template_list' %}" class="text-gray-300 hover:text-brand transition-colors text-sm">Templates</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'my_creations' %}" class="text-gray-300 hover:text-brand transition-colors text-sm">My Creations</a>
+        {% if user.is_staff %}
+          <a href="{% url 'admin_templates' %}" class="text-gray-300 hover:text-brand transition-colors text-sm">⚙ Admin</a>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="flex items-center gap-3">
+      {% if user.is_authenticated %}
+        <a href="{% url 'dashboard' %}" class="text-sm text-gray-300 hover:text-white">
+          <div class="w-8 h-8 bg-brand rounded-full flex items-center justify-center text-black font-bold text-sm">
+            {{ user.username|first|upper }}
+          </div>
+        </a>
+        <a href="{% url 'logout' %}" class="text-xs text-gray-500 hover:text-white">Logout</a>
+      {% else %}
+        <a href="{% url 'login' %}" class="text-sm text-gray-300 hover:text-white border border-dark-border px-3 py-1.5 rounded-full">Login</a>
+        <a href="{% url 'register' %}" class="text-sm text-black bg-brand hover:bg-dark px-4 py-1.5 rounded-full font-semibold">Sign Up</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<!-- Messages -->
+{% if messages %}
+<div class="fixed top-20 right-4 z-50 space-y-2">
+  {% for msg in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm font-medium shadow-lg
+    {% if msg.tags == 'success' %}bg-green-500 text-white
+    {% elif msg.tags == 'error' %}bg-red-500 text-white
+    {% else %}bg-brand text-black{% endif %}">
+    {{ msg }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% block content %}{% endblock %}
+
+<!-- Footer -->
+<footer class="border-t border-dark-border mt-20 py-8 text-center text-gray-500 text-sm">
+  <p>© 2025 One Click Designer · <a href="#" class="text-brand hover:underline">Terms</a> · <a href="#" class="text-brand hover:underline">Privacy</a></p>
+</footer>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>
